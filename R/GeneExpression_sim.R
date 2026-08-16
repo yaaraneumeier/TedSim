@@ -127,7 +127,7 @@ WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step){
 #' @param p_a asymmetric division rate
 #' @param p_edge branching possibilities
 #' @param max_walk maximum walk distance on the state tree for one asymmetric division
-SimulateCellStates <- function(par,cell_edges,state_edges,sif_mean,S,p_a,p_edge = NULL,max_walk = 2){
+SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL){
   children <- cell_edges[cell_edges[,2]==par,3] # get the children of the current node
   State_list <-S
   flag <-sample(c(1,2),1)
@@ -151,20 +151,35 @@ SimulateCellStates <- function(par,cell_edges,state_edges,sif_mean,S,p_a,p_edge 
           print("error!")
         }
       }
-      if (runif(1,0,1)<=p_a){
-        if (j==flag){
-          choice <- sample(length(child_states),1,prob = p_childs)
-          S_parent[2] <-child_states[choice]
+if (runif(1,0,1)<=p_a){
+      if (j==flag){
+        # State walk scaling
+        if (scale_state_walk) {
+          t <- edge[4]  # branch length
+          if (state_walk_method == "poisson") {
+            # Poisson process: expected steps proportional to time
+            rate <- ifelse(is.null(walk_rate), max_walk / 2, walk_rate)
+            step_state <- rpois(1, lambda = rate * t)
+            step_state <- min(step_state, max_walk)
+            step_state <- max(step_state, 1)  # at least 1 step if asymmetric
+          } else if (state_walk_method == "repeat") {
+            # Repeat t times
+            step_state <- 0
+            for (i in seq_len(round(t))) {
+              step_state <- step_state + sample(1:max_walk, 1)
+            }
+            step_state <- min(step_state, max_walk)
+          }
+        } else {
+          # Current behavior
+          step_state <- sample(1:max_walk, 1)
         }
+        S_child <- WalkTree(S_parent, children[j], state_edges, sif_mean, p_edge, step = step_state)
       }
+    }
     }
 
-    if (runif(1,0,1)<=p_a){
-      if (j==flag){
-        step_state <- sample(1:max_walk,1)
-        S_child <- WalkTree(S_parent,children[j],state_edges,sif_mean, p_edge, step = step_state)
-      }
-    }
+
 
 
     #recursive calling if not leaf node
@@ -173,9 +188,9 @@ SimulateCellStates <- function(par,cell_edges,state_edges,sif_mean,S,p_a,p_edge 
       State_list <- rbind(t(matrix(State_list)),t(matrix(S_child)))
     }
     else{
-      result1 <- SimulateCellStates(children[j],cell_edges,state_edges,sif_mean = sif_mean,S = S_child,p_a = p_a,p_edge = p_edge, max_walk = max_walk)
+      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate)
       State_list <- rbind(t(matrix(State_list)),result1)
-    }
+    }    
     return(State_list)
   })
   State_list<-do.call(rbind,State_list)

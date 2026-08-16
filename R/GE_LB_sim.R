@@ -16,15 +16,15 @@
 #' @param N_ms Number of possible mutated states
 #' @param unif_on if unif_on is TRUE, the mutated states will be synthetically generated using uniform distribution; otherwise, it will be sampled from a real dataset
 #' @param lambda a num vector that indicates the value of lambda that weights the additional random walk value for different depths
-Samplelineage <- function(par,depth,anc_state,edges, muts = NULL,p_d = 0.1, mu = 0.1,edges_state,sif_mean=NULL,S = NULL, p_a = 0.8,cif=NULL,flag=NULL, barcode = NULL, N_ms = NULL, unif_on = FALSE, lambda = NULL){
+Samplelineage <- function(par, depth, anc_state, edges, muts = NULL, p_d = 0.1, mu = 0.1, edges_state, sif_mean = NULL, S = NULL, p_a = 0.8, cif = NULL, flag = NULL, barcode = NULL, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu"){  
   children <- edges[edges[,2]==par,3] # get the children of the current node
   result<-lapply(c(1:length(children)),function(j){
     edge<-edges[edges[,2]==par & edges[,3]==children[j],] # given the parent and child, find the edge
     if(sum(edges[,2]==children[j])==0){
-      result <- SampleEdgeNew(edge,depth,anc_state,edges,sif_mean = sif_mean,S=S,cif = cif, mu = mu,p_d = p_d, barcode = barcode, flag = flag,N_ms = N_ms, unif_on = unif_on,lambda = lambda)
+      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
       result <- result[c(1:(length(result[,1]-1))),]
     }else{
-      result <- SampleEdgeNew(edge,depth,anc_state,edges,sif_mean = sif_mean,S=S,cif = cif, mu = mu,p_d = p_d, barcode = barcode, flag = flag,N_ms = N_ms, unif_on = unif_on,lambda = lambda)
+      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
       anc_state <- result[length(result[,1]),4]
       if (flag ==1){
         barcode <- result[length(result[,1]),5:length(result[1,])]
@@ -34,7 +34,7 @@ Samplelineage <- function(par,depth,anc_state,edges, muts = NULL,p_d = 0.1, mu =
       result <- result[c(1:(length(result[,1]-1))),]
 
       depth <- depth + edge[4]
-      result1 <- Samplelineage(children[j],depth,anc_state,edges,edges_state=edges_state,sif_mean=sif_mean,S = S, p_a = p_a,cif=cif,flag = flag,mu = mu, p_d = p_d,barcode = barcode,N_ms = N_ms, unif_on = unif_on,lambda = lambda)
+      result1 <- Samplelineage(children[j], depth, anc_state, edges, edges_state = edges_state, sif_mean = sif_mean, S = S, p_a = p_a, cif = cif, flag = flag, mu = mu, p_d = p_d, barcode = barcode, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
       result <- rbind(result,result1)
     }
     return(result)
@@ -60,7 +60,7 @@ Samplelineage <- function(par,depth,anc_state,edges, muts = NULL,p_d = 0.1, mu =
 #' @param N_ms Number of possible mutated states
 #' @param unif_on if unif_on is TRUE, the mutated states will be synthetically generated using uniform distribution; otherwise, it will be sampled from a real dataset
 #' @param lambda a num vector that indicates the value of lambda that weights the additional random walk value for different depths
-SampleEdgeNew <- function(edge,depth,anc_state,edges,sif_mean=NULL,S=NULL,cif = NULL, mu = 0.1,p_d = 0, barcode = NULL, flag = 0, N_ms = NULL, unif_on = FALSE, lambda = NULL){
+SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NULL, cif = NULL, mu = 0.1, p_d = 0, barcode = NULL, flag = 0, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu"){  
   state_prev <- S[edge[2],]
   state <- S[edge[3],]
   cifs <- sif_mean[[cif]]
@@ -69,15 +69,45 @@ SampleEdgeNew <- function(edge,depth,anc_state,edges,sif_mean=NULL,S=NULL,cif = 
   t_sample<-c(0,seq(0, edge[4], edge[4]))
   t_interval<-diff(t_sample)
   x_change <- sapply(t_interval,function(sig){rnorm(1,0,sqrt(sig))})[2]
-  x_sample <- state_mean-state_mean_prev+lambda[depth+1]*cumsum(x_change)
-  if (flag ==1){
+  # Lambda scaling
+  if (lambda_scaling == "depth") {
+    # Current behavior: discrete depth-based
+    depth_index <- min(floor(depth) + 1, length(lambda))
+    lambda_value <- lambda[depth_index]
+  } else if (lambda_scaling == "total_time") {
+    # New behavior: continuous total-time-based
+    child_node <- edge[3]
+    total_t <- total_time_to_node[child_node]
+    t_max <- max(total_time_to_node)
+    lambda_value <- lambda[1] - (lambda[1] - lambda[2]) * (total_t / t_max)
+  }
+  x_sample <- state_mean - state_mean_prev + lambda_value * cumsum(x_change)
+if (flag == 1){
     child_barcode <- barcode
     state_dist <- Mutated_state_dist(N_ms, cm)
-    child_barcode <- generate_mutation(child_barcode,mu = mu,p_d = p_d,N_ms = N_ms, mutation_dist = state_dist, unif_on = unif_on)
-    barcodes <- rbind(barcode,child_barcode)
-    result<-cbind(depth+t_sample[-1],anc_state+x_sample,barcodes)
-  }else{
-    result<-cbind(depth+t_sample[-1],anc_state+x_sample)
+    
+    # Barcode mutation scaling
+    if (scale_barcode_mutations) {
+      t <- edge[4]  # branch length
+      if (barcode_method == "scale_mu") {
+        # Scale mutation probability with time
+        mu_effective <- 1 - (1 - mu)^t
+        child_barcode <- generate_mutation(child_barcode, mu = mu_effective, p_d = p_d, N_ms = N_ms, mutation_dist = state_dist, unif_on = unif_on)
+      } else if (barcode_method == "repeat") {
+        # Apply mutations t times
+        for (i in seq_len(round(t))) {
+          child_barcode <- generate_mutation(child_barcode, mu = mu, p_d = p_d, N_ms = N_ms, mutation_dist = state_dist, unif_on = unif_on)
+        }
+      }
+    } else {
+      # Current behavior: one mutation event per division
+      child_barcode <- generate_mutation(child_barcode, mu = mu, p_d = p_d, N_ms = N_ms, mutation_dist = state_dist, unif_on = unif_on)
+    }
+    
+    barcodes <- rbind(barcode, child_barcode)
+    result <- cbind(depth + t_sample[-1], anc_state + x_sample, barcodes)
+  } else {
+    result <- cbind(depth + t_sample[-1], anc_state + x_sample)
   }
   rownames(result) <- c()
   result <- cbind(rep(edge[2],length(result[,1])),rep(edge[3],length(result[,1])),result)
