@@ -81,7 +81,8 @@ SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NU
     t_max <- max(total_time_to_node)
     lambda_value <- lambda[1] - (lambda[1] - lambda[2]) * (total_t / t_max)
   }
-  x_sample <- state_mean - state_mean_prev + lambda_value * cumsum(x_change)
+  t <- edge[4]  # branch length
+  x_sample <- t * (state_mean - state_mean_prev + lambda_value * cumsum(x_change))
 if (flag == 1){
     child_barcode <- barcode
     state_dist <- Mutated_state_dist(N_ms, cm)
