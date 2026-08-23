@@ -26,16 +26,52 @@
 #' @param walk_rate optional, numeric, expected steps per unit time for Poisson method. Default NULL (uses max_walk/2).
 #' @param scale_barcode_mutations optional, logical, if TRUE scales barcode mutations with branch length. Default FALSE.
 #' @param barcode_method optional, character, method for scaling: "scale_mu" or "repeat". Default "scale_mu".
+#' @param ultrametric optional, logical, if TRUE makes tree ultrametric (all leaves equidistant from root). Default FALSE.
 #' @param lambda_scaling optional, character, lambda scaling method: "depth" or "total_time". Default "depth".
 #' @param lambda_range optional, numeric vector of length 2, c(lambda_max, lambda_min) for total_time scaling. Default c(1, 0.1).
 #' @import ape
 #' @export
-SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1)){  
+
+
+#' Make a tree ultrametric using node heights method
+#' All leaves will be equidistant from the root
+make_ultrametric <- function(tree) {
+  n_tips <- length(tree$tip.label)
+  n_total <- n_tips + tree$Nnode
+  
+  # Initialize heights (leaves = 0)
+  node_heights <- rep(0, n_total)
+  
+  # Compute heights bottom-up
+  # height[node] = max over children of (height[child] + edge_length_to_child)
+  # Iterate until stable (handles any edge ordering)
+  for (iter in 1:n_total) {
+    for (i in 1:nrow(tree$edge)) {
+      parent <- tree$edge[i, 1]
+      child <- tree$edge[i, 2]
+      candidate <- node_heights[child] + tree$edge.length[i]
+      if (candidate > node_heights[parent]) {
+        node_heights[parent] <- candidate
+      }
+    }
+  }
+  
+  # Recalculate edge lengths: parent_height - child_height
+  for (i in 1:nrow(tree$edge)) {
+    parent <- tree$edge[i, 1]
+    child <- tree$edge[i, 2]
+    tree$edge.length[i] <- node_heights[parent] - node_heights[child]
+  }
+  
+  return(tree)
+}
+
+SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1)){  
 if (is.null(T_cell)){
     T_cell <- stree(ncells, type = "balanced")
   }
   
-  # Branch length generation
+    # Branch length generation
   if (variable_branch_lengths) {
     # Only generate new branch lengths if T_cell was not provided by user
     # (if user provided T_cell, keep their branch lengths)
@@ -68,10 +104,20 @@ if (is.null(T_cell)){
         .Random.seed <<- old_seed
       }
     }
+    
+    # Make ultrametric if requested (applies whether branch lengths were generated or provided)
+    if (ultrametric) {
+      T_cell <- make_ultrametric(T_cell)
+    }
   } else {
     # Current behavior: uniform branch lengths
     T_cell$edge.length <- rep(1, length(T_cell$edge[,1]))
   }
+  #  }
+  #} else {
+  #  # Current behavior: uniform branch lengths
+  #  T_cell$edge.length <- rep(1, length(T_cell$edge[,1]))
+  #}
   N_nodes <- length(T_cell$edge[,1])+1
   cell_edges <- cbind(T_cell$edge,T_cell$edge.length)
   cell_edges <- cbind(c(1:length(cell_edges[,1])),cell_edges)
