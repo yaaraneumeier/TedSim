@@ -16,15 +16,15 @@
 #' @param N_ms Number of possible mutated states
 #' @param unif_on if unif_on is TRUE, the mutated states will be synthetically generated using uniform distribution; otherwise, it will be sampled from a real dataset
 #' @param lambda a num vector that indicates the value of lambda that weights the additional random walk value for different depths
-Samplelineage <- function(par, depth, anc_state, edges, muts = NULL, p_d = 0.1, mu = 0.1, edges_state, sif_mean = NULL, S = NULL, p_a = 0.8, cif = NULL, flag = NULL, barcode = NULL, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu"){  
+Samplelineage <- function(par, depth, anc_state, edges, muts = NULL, p_d = 0.1, mu = 0.1, edges_state, sif_mean = NULL, S = NULL, p_a = 0.8, cif = NULL, flag = NULL, barcode = NULL, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu", ou_mode = FALSE, ou_alpha = 1.0){  
   children <- edges[edges[,2]==par,3] # get the children of the current node
   result<-lapply(c(1:length(children)),function(j){
     edge<-edges[edges[,2]==par & edges[,3]==children[j],] # given the parent and child, find the edge
     if(sum(edges[,2]==children[j])==0){
-      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
+      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method, ou_mode = ou_mode, ou_alpha = ou_alpha)      
       result <- result[c(1:(length(result[,1]-1))),]
     }else{
-      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
+      result <- SampleEdgeNew(edge, depth, anc_state, edges, sif_mean = sif_mean, S = S, cif = cif, mu = mu, p_d = p_d, barcode = barcode, flag = flag, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method, ou_mode = ou_mode, ou_alpha = ou_alpha)      
       anc_state <- result[length(result[,1]),4]
       if (flag ==1){
         barcode <- result[length(result[,1]),5:length(result[1,])]
@@ -34,7 +34,7 @@ Samplelineage <- function(par, depth, anc_state, edges, muts = NULL, p_d = 0.1, 
       result <- result[c(1:(length(result[,1]-1))),]
 
       depth <- depth + edge[4]
-      result1 <- Samplelineage(children[j], depth, anc_state, edges, edges_state = edges_state, sif_mean = sif_mean, S = S, p_a = p_a, cif = cif, flag = flag, mu = mu, p_d = p_d, barcode = barcode, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      
+      result1 <- Samplelineage(children[j], depth, anc_state, edges, edges_state = edges_state, sif_mean = sif_mean, S = S, p_a = p_a, cif = cif, flag = flag, mu = mu, p_d = p_d, barcode = barcode, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method, ou_mode = ou_mode, ou_alpha = ou_alpha)      
       result <- rbind(result,result1)
     }
     return(result)
@@ -60,7 +60,7 @@ Samplelineage <- function(par, depth, anc_state, edges, muts = NULL, p_d = 0.1, 
 #' @param N_ms Number of possible mutated states
 #' @param unif_on if unif_on is TRUE, the mutated states will be synthetically generated using uniform distribution; otherwise, it will be sampled from a real dataset
 #' @param lambda a num vector that indicates the value of lambda that weights the additional random walk value for different depths
-SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NULL, cif = NULL, mu = 0.1, p_d = 0, barcode = NULL, flag = 0, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu"){  
+SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NULL, cif = NULL, mu = 0.1, p_d = 0, barcode = NULL, flag = 0, N_ms = NULL, unif_on = FALSE, lambda = NULL, lambda_scaling = "depth", total_time_to_node = NULL, scale_barcode_mutations = FALSE, barcode_method = "scale_mu", ou_mode = FALSE, ou_alpha = 1.0){  
   state_prev <- S[edge[2],]
   state <- S[edge[3],]
   cifs <- sif_mean[[cif]]
@@ -82,7 +82,29 @@ SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NU
     lambda_value <- lambda[1] - (lambda[1] - lambda[2]) * (total_t / t_max)
   }
   t <- edge[4]  # branch length
-  x_sample <- t * (state_mean - state_mean_prev + lambda_value * cumsum(x_change))
+  
+  if (ou_mode) {
+    # Ornstein-Uhlenbeck process
+    # Expression is pulled toward state-specific optimum (theta)
+    theta <- state_mean  # optimum is current state's SIF value
+    alpha <- ou_alpha
+    
+    decay <- exp(-alpha * t)
+    
+    # OU variance term
+    if (alpha > 1e-10) {
+      ou_sigma <- sqrt((1 - exp(-2 * alpha * t)) / (2 * alpha))
+    } else {
+      ou_sigma <- sqrt(t)  # falls back to BM when alpha~0
+    }
+    
+    # OU evolution: pull toward state optimum + stochastic term
+    x_sample <- anc_state * decay + theta * (1 - decay) + lambda_value * ou_sigma * rnorm(1)
+    
+  } else {
+    # Original BM behavior
+    x_sample <- t * (state_mean - state_mean_prev + lambda_value * cumsum(x_change))
+  }
 if (flag == 1){
     child_barcode <- barcode
     state_dist <- Mutated_state_dist(N_ms, cm)

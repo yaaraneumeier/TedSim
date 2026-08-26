@@ -28,7 +28,9 @@
 #' @param barcode_method optional, character, method for scaling: "scale_mu" or "repeat". Default "scale_mu".
 #' @param ultrametric optional, logical, if TRUE makes tree ultrametric (all leaves equidistant from root). Default FALSE.
 #' @param lambda_scaling optional, character, lambda scaling method: "depth" or "total_time". Default "depth".
-#' @param lambda_range optional, numeric vector of length 2, c(lambda_max, lambda_min) for total_time scaling. Default c(1, 0.1).
+#' @param lambda_range
+#' @param ou_mode Logical. If TRUE, use Ornstein-Uhlenbeck process instead of Brownian Motion. Default FALSE.
+#' @param ou_alpha Numeric. Selection strength for OU process. Higher values = stronger mean reversion. Default 1.0. optional, numeric vector of length 2, c(lambda_max, lambda_min) for total_time scaling. Default c(1, 0.1).
 #' @import ape
 #' @export
 
@@ -66,7 +68,7 @@ make_ultrametric <- function(tree) {
   return(tree)
 }
 
-SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1)){  
+SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1), ou_mode=FALSE, ou_alpha=1.0, evolve_params=c("s")){  
 if (is.null(T_cell)){
     T_cell <- stree(ncells, type = "balanced")
   }
@@ -172,12 +174,12 @@ if (is.null(T_cell)){
   }
 
   root_barcode <- rep(0,N_char)
-  neutral <- Samplelineage(Node_cell, 0, cif_center, edges = cell_edges, edges_state = state_edges, sif_mean = sif_mean, S = State_table, cif = 1, p_a = p_a, p_d = p_d, mu = mu, flag = 1, barcode = root_barcode, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method) 
+  neutral <- Samplelineage(Node_cell, 0, cif_center, edges = cell_edges, edges_state = state_edges, sif_mean = sif_mean, S = State_table, cif = 1, p_a = p_a, p_d = p_d, mu = mu, flag = 1, barcode = root_barcode, N_ms = N_ms, unif_on = unif_on, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method, ou_mode = ou_mode, ou_alpha = ou_alpha) 
   muts <- neutral[,5:length(neutral[1,])]
 
   param_names <- c("kon", "koff", "s")
-  N_DE_cifs = c(0,0,n_diff)
-  N_ND_cifs =c(n_CIF,n_CIF,n_CIF-n_diff)
+  N_DE_cifs = c(ifelse("kon" %in% evolve_params, n_diff, 0), ifelse("koff" %in% evolve_params, n_diff, 0), ifelse("s" %in% evolve_params, n_diff, 0))
+  N_ND_cifs = c(n_CIF - N_DE_cifs[1], n_CIF - N_DE_cifs[2], n_CIF - N_DE_cifs[3])
 
 
   cifs <- lapply(c(1:3),function(parami){
@@ -188,7 +190,7 @@ if (is.null(T_cell)){
     if(N_DE_cifs[parami]!=0){
       #if there is more than 1 de_cifs for the parameter we are looking at
       de_cif <- lapply(c(1:N_DE_cifs[parami]),function(cif_i){
-        Samplelineage(Node_cell, 0, cif_center, edges = cell_edges, edges_state = state_edges, sif_mean = sif_mean, S = State_table, p_a = p_a, cif = cif_i, flag = 0, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method)      })
+        Samplelineage(Node_cell, 0, cif_center, edges = cell_edges, edges_state = state_edges, sif_mean = sif_mean, S = State_table, p_a = p_a, cif = cif_i, flag = 0, lambda = lambda, lambda_scaling = lambda_scaling, total_time_to_node = total_time_to_node, scale_barcode_mutations = scale_barcode_mutations, barcode_method = barcode_method, ou_mode = ou_mode, ou_alpha = ou_alpha)      })
 
       de_cif <- lapply(de_cif,function(X){X[,4]})
       de_cif <- do.call(cbind,de_cif)
