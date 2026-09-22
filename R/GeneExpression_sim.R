@@ -127,7 +127,7 @@ WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step){
 #' @param p_a asymmetric division rate
 #' @param p_edge branching possibilities
 #' @param max_walk maximum walk distance on the state tree for one asymmetric division
-SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL){
+SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL, allow_repeat_walks = FALSE){
   children <- cell_edges[cell_edges[,2]==par,3] # get the children of the current node
   State_list <-S
   flag <-sample(c(1,2),1)
@@ -141,7 +141,7 @@ SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p
     depth_par <- S_parent[3] #depth of par
     S_child <- c(S_parent[1:3],children[j])
 
-    if (depth_par == 0){
+    if (depth_par == 0 || allow_repeat_walks){
       child_states <- state_edges[state_edges[,2]==state_par,3]
       if (is.null(p_edge)){
         p_childs <- NULL
@@ -188,7 +188,7 @@ if (runif(1,0,1)<=p_a){
       State_list <- rbind(t(matrix(State_list)),t(matrix(S_child)))
     }
     else{
-      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate)
+      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks)      
       State_list <- rbind(t(matrix(State_list)),result1)
     }    
     return(State_list)

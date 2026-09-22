@@ -22,6 +22,7 @@
 #' @param branch_length_params optional, list, parameters for the distribution. Default list(rate=1) for exponential.
 #' @param branch_length_seed optional, integer, seed for branch length generation. If NULL, uses current random state.
 #' @param scale_state_walk optional, logical, if TRUE scales state walk with branch length. Default FALSE.
+#' @param branch_length_depth_gamma optional, numeric. Scales branch lengths by (relative depth)^gamma, renormalised to preserve the mean. NEGATIVE shortens terminal edges relative to deep ones, making cherry edges unrepresentative of the tree. 0 (default) leaves lengths i.i.d. as before.
 #' @param state_walk_method optional, character, method for scaling: "poisson" or "repeat". Default "poisson".
 #' @param walk_rate optional, numeric, expected steps per unit time for Poisson method. Default NULL (uses max_walk/2).
 #' @param scale_barcode_mutations optional, logical, if TRUE scales barcode mutations with branch length. Default FALSE.
@@ -31,6 +32,7 @@
 #' @param lambda_range
 #' @param ou_mode Logical. If TRUE, use Ornstein-Uhlenbeck process instead of Brownian Motion. Default FALSE.
 #' @param ou_alpha Numeric. Selection strength for OU process. Higher values = stronger mean reversion. Default 1.0. optional, numeric vector of length 2, c(lambda_max, lambda_min) for total_time scaling. Default c(1, 0.1).
+#' @param allow_repeat_walks optional, logical. If TRUE, a cell may change state at any division rather than only while still at the state-tree root. Default FALSE preserves existing behaviour.
 #' @import ape
 #' @export
 
@@ -68,7 +70,7 @@ make_ultrametric <- function(tree) {
   return(tree)
 }
 
-SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1), ou_mode=FALSE, ou_alpha=1.0, evolve_params=c("s")){  
+SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1), ou_mode=FALSE, ou_alpha=1.0, evolve_params=c("s"), branch_length_depth_gamma=0, allow_repeat_walks=FALSE){  
 if (is.null(T_cell)){
     T_cell <- stree(ncells, type = "balanced")
   }
@@ -107,6 +109,44 @@ if (is.null(T_cell)){
       }
     }
     
+
+    # Depth-dependent scaling of branch lengths.
+    #
+    # By default every edge is drawn i.i.d., so a terminal edge is statistically
+    # identical to a deep one. That makes CherryML's cherries a REPRESENTATIVE
+    # sample of the tree, and EM -- which uses every edge -- gains only variance
+    # reduction over it.
+    #
+    # rel is 0 near the root and 1 at the tips, so:
+    #   gamma < 0  terminal edges SHORT relative to deep ones. CherryML then
+    #              estimates Q from edges where little happened, biasing its rate
+    #              toward zero, while the deep edges carrying the transitions
+    #              never enter its likelihood. This is the case of interest.
+    #   gamma > 0  the reverse.
+    #   gamma = 0  branch skipped entirely; identical to previous behaviour.
+    #
+    # Renormalised to preserve the mean, so gamma changes how length is
+    # DISTRIBUTED across depths without changing total tree length -- otherwise a
+    # gamma effect would be confounded with simply having a longer tree.
+    if (branch_length_depth_gamma != 0) {
+      node_depth <- rep(NA_integer_, max(T_cell$edge))
+      root_node <- length(T_cell$tip.label) + 1
+      node_depth[root_node] <- 0L
+      repeat {
+        todo <- which(is.na(node_depth[T_cell$edge[, 2]]) &
+                      !is.na(node_depth[T_cell$edge[, 1]]))
+        if (!length(todo)) break
+        node_depth[T_cell$edge[todo, 2]] <- node_depth[T_cell$edge[todo, 1]] + 1L
+      }
+      d   <- node_depth[T_cell$edge[, 2]]
+      rel <- d / max(d, na.rm = TRUE)
+      w   <- pmax(rel, 0.05) ^ branch_length_depth_gamma
+      mean_before <- mean(T_cell$edge.length)
+      T_cell$edge.length <- T_cell$edge.length * w
+      T_cell$edge.length <- T_cell$edge.length *
+                            (mean_before / mean(T_cell$edge.length))
+    }
+
     # Make ultrametric if requested (applies whether branch lengths were generated or provided)
     if (ultrametric) {
       T_cell <- make_ultrametric(T_cell)
@@ -152,7 +192,7 @@ if (is.null(T_cell)){
     S <- t(matrix(c(S[1:3],cell_root),byrow = TRUE))
   }
 
-  State_table <- SimulateCellStates(cell_root, cell_edges, state_edges, sif_mean = sif_mean[[1]], S = S, p_a = p_a, p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate)
+  State_table <- SimulateCellStates(cell_root, cell_edges, state_edges, sif_mean = sif_mean[[1]], S = S, p_a = p_a, p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks)
 # Lambda processing
   if (lambda_scaling == "depth") {
     # Current behavior: discrete depth-based lambda
