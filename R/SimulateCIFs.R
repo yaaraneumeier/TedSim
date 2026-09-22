@@ -70,7 +70,7 @@ make_ultrametric <- function(tree) {
   return(tree)
 }
 
-SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1), ou_mode=FALSE, ou_alpha=1.0, evolve_params=c("s"), branch_length_depth_gamma=0, allow_repeat_walks=FALSE){  
+SimulateCIFs <- function(ncells, phyla, cif_center=1, Sigma=0.5, p_a=0.8, p_edge=NULL, n_CIF, n_diff, step=1, p_d=0.1, mu=0.1, N_char=9, N_ms=100, unif_on=FALSE, SIF_res=NULL, max_walk=2, lambda=0.05, T_cell=NULL, variable_branch_lengths=FALSE, branch_length_dist="exponential", branch_length_params=list(rate=1), branch_length_seed=NULL, ultrametric = FALSE, scale_state_walk=FALSE, state_walk_method="poisson", walk_rate=NULL, scale_barcode_mutations=FALSE, barcode_method="scale_mu", lambda_scaling="depth", lambda_range=c(1, 0.1), ou_mode=FALSE, ou_alpha=1.0, evolve_params=c("s"), branch_length_depth_gamma=0, allow_repeat_walks=FALSE, choose_root_branch=FALSE){  
 if (is.null(T_cell)){
     T_cell <- stree(ncells, type = "balanced")
   }
@@ -192,7 +192,7 @@ if (is.null(T_cell)){
     S <- t(matrix(c(S[1:3],cell_root),byrow = TRUE))
   }
 
-  State_table <- SimulateCellStates(cell_root, cell_edges, state_edges, sif_mean = sif_mean[[1]], S = S, p_a = p_a, p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks)
+  State_table <- SimulateCellStates(cell_root, cell_edges, state_edges, sif_mean = sif_mean[[1]], S = S, p_a = p_a, p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks, choose_root_branch = choose_root_branch)
 # Lambda processing
   if (lambda_scaling == "depth") {
     # Current behavior: discrete depth-based lambda

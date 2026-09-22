@@ -81,8 +81,18 @@ SIFGenerate <- function(phyla, n_diff, step = 1){
 #' @param sif_mean State identity Vector values
 #' @param p_edge the edge transition probability table, default is NULL so that the child edges are chosen with equal possibilities
 #' @param step sampling stepsize of diff-SIF Brownian motion
-WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step){
+WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step, choose_root_branch = FALSE){
   S_child <- c(S_parent[1:3],child)
+  # A cell at depth 0 sits AT the state-tree root rather than on an edge; its
+  # (source, target) label is just the first root edge. Upstream treats that label
+  # as a committed choice, so the root's other children are never reachable. With
+  # choose_root_branch, pick the root edge afresh at the first walk. Root edges
+  # share their depth-0 SIF value, so relabelling causes no jump in expression.
+  if (choose_root_branch && S_child[3] == 0) {
+    root_kids <- state_edges[state_edges[,2] == S_child[1], 3]
+    p_root <- if (is.null(p_edge)) NULL else p_edge[p_edge[,1] == S_child[1], 3]
+    S_child[2] <- root_kids[sample(length(root_kids), 1, prob = p_root)]
+  }
   #state_par <- S_parent[1] #previous state of par
   #target_state <- S_parent[2] #target state of par
   #depth_par <- S_parent[3] #depth of par
@@ -127,7 +137,7 @@ WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step){
 #' @param p_a asymmetric division rate
 #' @param p_edge branching possibilities
 #' @param max_walk maximum walk distance on the state tree for one asymmetric division
-SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL, allow_repeat_walks = FALSE){
+SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL, allow_repeat_walks = FALSE, choose_root_branch = FALSE){
   children <- cell_edges[cell_edges[,2]==par,3] # get the children of the current node
   State_list <-S
   flag <-sample(c(1,2),1)
@@ -174,7 +184,7 @@ if (runif(1,0,1)<=p_a){
           # Current behavior
           step_state <- sample(1:max_walk, 1)
         }
-        S_child <- WalkTree(S_parent, children[j], state_edges, sif_mean, p_edge, step = step_state)
+        S_child <- WalkTree(S_parent, children[j], state_edges, sif_mean, p_edge, step = step_state, choose_root_branch = choose_root_branch)
       }
     }
     }
@@ -188,7 +198,7 @@ if (runif(1,0,1)<=p_a){
       State_list <- rbind(t(matrix(State_list)),t(matrix(S_child)))
     }
     else{
-      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks)      
+      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks, choose_root_branch = choose_root_branch)      
       State_list <- rbind(t(matrix(State_list)),result1)
     }    
     return(State_list)
