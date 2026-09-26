@@ -137,7 +137,7 @@ WalkTree <- function(S_parent,child,state_edges,sif_mean, p_edge, step, choose_r
 #' @param p_a asymmetric division rate
 #' @param p_edge branching possibilities
 #' @param max_walk maximum walk distance on the state tree for one asymmetric division
-SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL, allow_repeat_walks = FALSE, choose_root_branch = FALSE){
+SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p_edge = NULL, max_walk = 2, scale_state_walk = FALSE, state_walk_method = "poisson", walk_rate = NULL, allow_repeat_walks = FALSE, choose_root_branch = FALSE, division_mode = "exclusive"){
   children <- cell_edges[cell_edges[,2]==par,3] # get the children of the current node
   State_list <-S
   flag <-sample(c(1,2),1)
@@ -162,7 +162,12 @@ SimulateCellStates <- function(par, cell_edges, state_edges, sif_mean, S, p_a, p
         }
       }
 if (runif(1,0,1)<=p_a){
-      if (j==flag){
+      # "exclusive" keeps TedSim's rule that only one daughter walks, which
+      # makes sisters negatively correlated -- something no Markov-on-a-tree
+      # model can represent, and which sits entirely in CherryML's input since
+      # cherries are sister pairs. "independent" lets each daughter walk on its
+      # own draw, which also doubles the per-edge rate from p_a/2 to p_a.
+      if (j==flag || division_mode == "independent"){
         # State walk scaling
         if (scale_state_walk) {
           t <- edge[4]  # branch length
@@ -198,7 +203,7 @@ if (runif(1,0,1)<=p_a){
       State_list <- rbind(t(matrix(State_list)),t(matrix(S_child)))
     }
     else{
-      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks, choose_root_branch = choose_root_branch)      
+      result1 <- SimulateCellStates(children[j], cell_edges, state_edges, sif_mean = sif_mean, S = S_child, p_a = p_a, p_edge = p_edge, max_walk = max_walk, scale_state_walk = scale_state_walk, state_walk_method = state_walk_method, walk_rate = walk_rate, allow_repeat_walks = allow_repeat_walks, choose_root_branch = choose_root_branch, division_mode = division_mode)      
       State_list <- rbind(t(matrix(State_list)),result1)
     }    
     return(State_list)
