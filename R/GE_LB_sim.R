@@ -99,7 +99,11 @@ SampleEdgeNew <- function(edge, depth, anc_state, edges, sif_mean = NULL, S = NU
     }
     
     # OU evolution: pull toward state optimum + stochastic term
-    x_sample <- anc_state * decay + theta * (1 - decay) + lambda_value * ou_sigma * rnorm(1)
+    # A delta, not a new value: the caller adds anc_state back, so
+    #   anc_state + (theta - anc_state)(1 - decay) = anc_state*decay + theta*(1 - decay),
+    # which is the intended OU update. Adding anc_state to a full value instead
+    # gave anc_state*(1 + decay) -- a child roughly double its parent at small alpha.
+    x_sample <- (theta - anc_state) * (1 - decay) + lambda_value * ou_sigma * rnorm(1)
     
   } else {
     # Original BM behavior

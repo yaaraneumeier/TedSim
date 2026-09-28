@@ -223,10 +223,17 @@ if (is.null(T_cell)){
 
 
   cifs <- lapply(c(1:3),function(parami){
-    nd_cif <- lapply(c(1:N_ND_cifs[parami]),function(icif){
-      rnorm(N_nodes-1,cif_center,Sigma)
-    })
-    nd_cif <- do.call(cbind,nd_cif)
+    ## seq_len, not 1:N -- `1:0` gives c(1, 0), so a zero count silently
+    ## produced TWO spurious non-DE columns (32 per matrix instead of 30
+    ## when n_diff == n_CIF). A 0-column matrix rather than NULL is what
+    ## cbind(nd_cif, de_cif) needs below.
+    nd_cif <- if (N_ND_cifs[parami] > 0) {
+      do.call(cbind, lapply(seq_len(N_ND_cifs[parami]), function(icif){
+        rnorm(N_nodes-1,cif_center,Sigma)
+      }))
+    } else {
+      matrix(numeric(0), nrow = N_nodes-1, ncol = 0)
+    }
     if(N_DE_cifs[parami]!=0){
       #if there is more than 1 de_cifs for the parameter we are looking at
       de_cif <- lapply(c(1:N_DE_cifs[parami]),function(cif_i){
@@ -235,12 +242,17 @@ if (is.null(T_cell)){
       de_cif <- lapply(de_cif,function(X){X[,4]})
       de_cif <- do.call(cbind,de_cif)
       cifs <- cbind(nd_cif,de_cif)
+      ## paste() recycles a zero-length argument to "" rather than returning
+      ## character(0), so with no non-DE columns the nonDE half would still
+      ## produce one name and the colnames assignment would fail on length.
+      nd_names <- if (ncol(nd_cif) > 0)
+        paste(param_names[parami],'nonDE',seq_len(ncol(nd_cif)),sep='_') else character(0)
       colnames(cifs)<-c(
-        paste(param_names[parami],rep('nonDE',length(nd_cif[1,])),c(1:length(nd_cif[1,])),sep='_'),
+        nd_names,
         paste(param_names[parami],rep('DE',length(de_cif[1,])),c(1:length(de_cif[1,])),sep='_'))
     }else{
       cifs <- nd_cif
-      colnames(cifs)<-paste(param_names[parami],rep('nonDE',length(nd_cif[1,])),c(1:length(nd_cif[1,])),sep='_')
+      colnames(cifs)<-paste(param_names[parami],rep('nonDE',ncol(nd_cif)),seq_len(ncol(nd_cif)),sep='_')
     }
     return(cifs)
   })
